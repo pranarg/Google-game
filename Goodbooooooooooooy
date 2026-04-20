@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #000;
+    font-family: 'Segoe UI', sans-serif;
+    color: #fff;
+    padding: 16px;
+  }
+
+  h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #ff0000;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  input[type="text"] {
+    flex: 1;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 13px;
+    padding: 9px 12px;
+    outline: none;
+    transition: border 0.2s;
+  }
+
+  input[type="text"]:focus { border-color: #ff0000; }
+  input[type="text"]::placeholder { color: #444; }
+
+  .red-btn {
+    background: #ff0000;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+
+  .red-btn:hover { background: #cc0000; }
+
+  .error {
+    display: none;
+    color: #ff4444;
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+
+  .section-divider {
+    border: none;
+    border-top: 1px solid #222;
+    margin: 14px 0;
+  }
+
+  #chatBox {
+    background: #0a0a0a;
+    border: 1px solid #222;
+    border-radius: 8px;
+    padding: 10px;
+    height: 200px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .msg {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 90%;
+  }
+
+  .msg.user {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    align-self: flex-end;
+    color: #fff;
+  }
+
+  .msg.ai {
+    background: #1a0000;
+    border: 1px solid #3a0000;
+    align-self: flex-start;
+    color: #ffaaaa;
+  }
+
+  .msg.ai a {
+    color: #ff4444;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .msg.thinking {
+    background: #111;
+    border: 1px solid #222;
+    align-self: flex-start;
+    color: #555;
+    font-style: italic;
+  }
+
+  #fullscreenView {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    z-index: 999999;
+    flex-direction: column;
+  }
+
+  #fullscreenView iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+  }
+
+  #backBar {
+    background: #111;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #222;
+    flex-shrink: 0;
+  }
+
+  #backBtn {
+    background: #ff0000;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  #backBtn:hover { background: #cc0000; }
+  #backBar span { font-size: 12px; color: #666; }
+</style>
+</head>
+<body>
+
+<div id="mainView">
+
+  <h2>▶ Watch YouTube</h2>
+  <div class="input-row">
+    <input type="text" id="urlInput" placeholder="Paste a YouTube link here..." />
+    <button class="red-btn" onclick="loadVideo()">Watch</button>
+  </div>
+  <p class="error" id="errMsg">Invalid YouTube URL. Please try again.</p>
+
+  <hr class="section-divider">
+
+  <h2>🤖 Ask AI for a Video</h2>
+  <div id="chatBox">
+    <div class="msg ai">Hey! Ask me for a YouTube video and I'll find one for you. Try "give me a funny video" or "find me a gaming video" 🎮</div>
+  </div>
+  <div class="input-row">
+    <input type="text" id="aiInput" placeholder="Ask for a video..." />
+    <button class="red-btn" onclick="askAI()">Ask</button>
+  </div>
+
+</div>
+
+<div id="fullscreenView">
+  <div id="backBar">
+    <button id="backBtn" onclick="goBack()">← Back</button>
+    <span>Press Back to return to the site</span>
+  </div>
+  <iframe id="ytFrame" src="" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+</div>
+
+<script>
+  var GEMINI_API_KEY = 'AIzaSyDI8MvBBl07toHPbKWSN2BmJFFBAUps7gs';
+
+  function extractID(url) {
+    url = url.trim();
+    var patterns = [
+      /[?&]v=([a-zA-Z0-9_-]{11})/,
+      /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+      /shorts\/([a-zA-Z0-9_-]{11})/,
+      /embed\/([a-zA-Z0-9_-]{11})/
+    ];
+    for (var i = 0; i < patterns.length; i++) {
+      var m = url.match(patterns[i]);
+      if (m) return m[1];
+    }
+    return null;
+  }
+
+  function loadVideo(url) {
+    var inputUrl = url || document.getElementById('urlInput').value;
+    var err = document.getElementById('errMsg');
+    var frame = document.getElementById('ytFrame');
+    err.style.display = 'none';
+    var id = extractID(inputUrl);
+    if (!id) { err.style.display = 'block'; return; }
+    frame.src = 'https://www.youtube.com/embed/' + id + '?autoplay=1';
+    document.getElementById('mainView').style.display = 'none';
+    document.getElementById('fullscreenView').style.display = 'flex';
+  }
+
+  function goBack() {
+    document.getElementById('ytFrame').src = '';
+    document.getElementById('fullscreenView').style.display = 'none';
+    document.getElementById('mainView').style.display = 'block';
+  }
+
+  document.getElementById('urlInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') loadVideo();
+  });
+
+  var chatHistory = [];
+
+  function addMsg(text, type) {
+    var box = document.getElementById('chatBox');
+    var div = document.createElement('div');
+    div.className = 'msg ' + type;
+    div.innerHTML = text;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+    return div;
+  }
+
+  async function askAI() {
+    var input = document.getElementById('aiInput');
+    var userText = input.value.trim();
+    if (!userText) return;
+    input.value = '';
+
+    addMsg(userText, 'user');
+    var thinking = addMsg('Thinking...', 'thinking');
+
+    chatHistory.push({ role: 'user', parts: [{ text: userText }] });
+
+    try {
+      var response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + GEMINI_API_KEY,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: {
+              parts: [{ text: 'You are a fun video assistant on a gaming website for kids. When the user asks for a video, suggest a real YouTube video with a real working URL. Format your reply like this: Here\'s a video for you: [video title](https://www.youtube.com/watch?v=VIDEO_ID). Always use real well-known YouTube video IDs that actually exist. Keep replies short and fun. Only suggest one video at a time. Keep everything kid-friendly.' }]
+            },
+            contents: chatHistory
+          })
+        }
+      );
+
+      var data = await response.json();
+      var aiText = data.candidates[0].content.parts[0].text;
+      chatHistory.push({ role: 'model', parts: [{ text: aiText }] });
+
+      thinking.remove();
+
+      var formatted = aiText.replace(/\[([^\]]+)\]\((https:\/\/(?:www\.)?youtu(?:be\.com|\.be)[^\)]+)\)/g, function(match, title, url) {
+        return '<a onclick="loadVideo(\'' + url + '\')">' + title + ' — click to watch!</a>';
+      });
+
+      addMsg(formatted, 'ai');
+
+    } catch(e) {
+      thinking.remove();
+      addMsg('Oops something went wrong. Try again!', 'ai');
+    }
+  }
+
+  document.getElementById('aiInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') askAI();
+  });
+</script>
+
+</body>
+</html>
+
+
+
